@@ -18,8 +18,8 @@ int main(void) {
     char *tokens[20];
 
     while(1) { // 기본 뼈대를 만들 것 - 무한 루프
-        printf("$ "); // 프롬프트 출력할 것임
-        fflush(stdout); // 츌력 버퍼 비우면서 내보내기 
+        // printf("$ "); 
+        // fflush(stdout); // 츌력 버퍼 비우면서 내보내기 
 
         if(fgets(input, sizeof(input), stdin) == NULL) {
             break; // EOF나 에러 시 루프 탈출
@@ -31,6 +31,63 @@ int main(void) {
             break;
         }
 
+        // 파이프 처리 먼저!
+        char *pipeToken = strchr(input, '|');
+        if(pipeToken != NULL) {
+            *pipeToken = '\0';
+            char *left = input;
+            char *right = pipeToken + 1;
+
+            char *command1[20], *command2[20];
+            int cmd1 = 0;
+            int cmd2 = 0;
+            char *token1 = strtok(left, " ");
+            while(token1 != NULL) {
+                command1[cmd1++] = token1;
+                token1 = strtok(NULL, " ");
+            }
+            command1[cmd1] = NULL;
+            char *token2 = strtok(right, " ");
+            while(token2 != NULL) {
+                command2[cmd2++] = token2;
+                token2 = strtok(NULL, " ");
+            }
+            command2[cmd2] = NULL;
+
+        int pipefd[2]; // 파이프 생성 
+        if(pipe(pipefd)==-1) {
+            perror("pipe failed");
+            continue;
+        }
+        pid_t pid1 = fork();
+        if(pid1 == 0) {
+            dup2(pipefd[1], STDOUT_FILENO);
+            close(pipefd[0]);
+            close(pipefd[1]);
+            
+            execvp(command1[0], command1);
+            perror("exec failed");
+            exit(1);
+        }
+        pid_t pid2 = fork();
+        if (pid2 == 0) {
+            dup2(pipefd[0], STDIN_FILENO);
+            close(pipefd[0]);
+            close(pipefd[1]);
+
+            execvp(command2[0], command2);
+            perror("exec failed");
+            exit(1);
+        }
+        close(pipefd[0]);
+        close(pipefd[1]);
+        waitpid(pid1, NULL, 0);
+        waitpid(pid2, NULL, 0);
+        continue;
+        }
+        // 파이프 처리 끝
+
+        // 토큰화 
         int tokenCount = 0;
         char *token = strtok(input, " "); // 첫 호출 구분자 자르기
         while(token!= NULL && tokenCount <20) {
@@ -38,11 +95,7 @@ int main(void) {
             token = strtok(NULL, " "); // 이후 호출 이어서 구분자 자르기 
         }
         tokens[tokenCount] = NULL;
-
-        // printf("잘 잘리는지 확인출력해볼게여 -> \n"); // 과제 내기 전에 삭제할 것
-        // for (int i = 0; i<tokenCount; i++) {
-        //     printf("%d: %s \n", i, tokens[i]);
-        // }
+        if(tokens[0] == NULL) continue; // 빈 입력 처리
 
         // cd 명령 처리 
         if(strcmp(tokens[0], "cd") == 0) { // strcmp()는 같으면 0을 리턴 
@@ -98,6 +151,7 @@ int main(void) {
             }
         }
 
+
         // 부모 프로세스가 fork로 자식 프로세스를 만들었음 
         // 부모가 자식의 종료 상태를 확인하지 않으면
         // 자식 프로세스가 커널에 남기 때문에 회수해주어야 함!
@@ -113,66 +167,15 @@ int main(void) {
                 // execvp는 성공하면 리턴하지 않음
                 perror("exec failed");
             }
-            return 1;
+            // return 1;
+            exit(1);
         }
         else {
             int status;
             waitpid(pid, &status, 0); // 여기서 0은 자식이 끝날 때까지 블럭된다는 뜻
         }
-
-        char *pipeToken = strchr(input, '|');
-        if(pipeToken != NULL) {
-            *pipeToken = '\0';
-            char *left = input;
-            char *right = pipeToken + 1;
-
-            char *command1[20], *command2[20];
-            int cmd1, cmd2 = 0;
-            char *token1 = strtok(left, " ");
-            while(token1 != NULL) {
-                command1[cmd1++] = token1;
-                token1 = strtok(NULL, " ");
-            }
-            command1[cmd1] = NULL;
-            char *token2 = strtok(right, " ");
-            while(token2 != NULL) {
-                command2[cmd2++] = token2;
-                token2 = strtok(NULL, " ");
-            }
-            command2[cmd2] = NULL;
-
-        int pipefd[2]; // 파이프 생성 
-        if(pipe(pipefd)==-1) {
-            perror("pipe failed");
-            continue;
-        }
-        pid_t pid1 = fork();
-        if(pid1 == 0) {
-            dup2(pipefd[1], STDOUT_FILENO);
-            close(pipefd[0]);
-            close(pipefd[1]);
-            
-            execvp(command1[0], command1);
-            perror("exec failed");
-            exit(1);
-        }
-        pid_t pid2 = fork();
-        if (pid2 == 0) {
-            dup2(pipefd[0], STDIN_FILENO);
-            close(pipefd[0]);
-            close(pipefd[1]);
-
-            execvp(command2[0], command2);
-            perror("exec failed");
-            exit(1);
-        }
-        close(pipefd[0]);
-        close(pipefd[1]);
-        waitpid(pid1, NULL, 0);
-        waitpid(pid2, NULL, 0);
-        continue;
     }
 
     return 0;
-    }
+    
 }
