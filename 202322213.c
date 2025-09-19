@@ -2,6 +2,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <stdlib.h>
 
 #define MAX_ALIAS 20
 
@@ -12,7 +13,7 @@ struct {
 
 int aliasCount = 0;
 
-int main() {
+int main(void) {
     char input[1024];
     char *tokens[20];
 
@@ -119,8 +120,59 @@ int main() {
             waitpid(pid, &status, 0); // 여기서 0은 자식이 끝날 때까지 블럭된다는 뜻
         }
 
+        char *pipeToken = strchr(input, '|');
+        if(pipeToken != NULL) {
+            *pipeToken = '\0';
+            char *left = input;
+            char *right = pipeToken + 1;
 
+            char *command1[20], *command2[20];
+            int cmd1, cmd2 = 0;
+            char *token1 = strtok(left, " ");
+            while(token1 != NULL) {
+                command1[cmd1++] = token1;
+                token1 = strtok(NULL, " ");
+            }
+            command1[cmd1] = NULL;
+            char *token2 = strtok(right, " ");
+            while(token2 != NULL) {
+                command2[cmd2++] = token2;
+                token2 = strtok(NULL, " ");
+            }
+            command2[cmd2] = NULL;
+
+        int pipefd[2]; // 파이프 생성 
+        if(pipe(pipefd)==-1) {
+            perror("pipe failed");
+            continue;
+        }
+        pid_t pid1 = fork();
+        if(pid1 == 0) {
+            dup2(pipefd[1], STDOUT_FILENO);
+            close(pipefd[0]);
+            close(pipefd[1]);
+            
+            execvp(command1[0], command1);
+            perror("exec failed");
+            exit(1);
+        }
+        pid_t pid2 = fork();
+        if (pid2 == 0) {
+            dup2(pipefd[0], STDIN_FILENO);
+            close(pipefd[0]);
+            close(pipefd[1]);
+
+            execvp(command2[0], command2);
+            perror("exec failed");
+            exit(1);
+        }
+        close(pipefd[0]);
+        close(pipefd[1]);
+        waitpid(pid1, NULL, 0);
+        waitpid(pid2, NULL, 0);
+        continue;
     }
-    
+
     return 0;
+    }
 }
