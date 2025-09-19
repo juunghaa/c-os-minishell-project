@@ -3,6 +3,15 @@
 #include <unistd.h>
 #include <sys/wait.h>
 
+#define MAX_ALIAS 20
+
+struct {
+    char name[50];
+    char command[200];
+} alias_table[MAX_ALIAS];
+
+int aliasCount = 0;
+
 int main() {
     char input[1024];
     char *tokens[20];
@@ -34,6 +43,60 @@ int main() {
         //     printf("%d: %s \n", i, tokens[i]);
         // }
 
+        // cd 명령 처리 
+        if(strcmp(tokens[0], "cd") == 0) { // strcmp()는 같으면 0을 리턴 
+            if(tokens[1] ==NULL) {
+                fprintf(stderr, "cd: missing argument\n");
+            }
+            else {
+                if(chdir(tokens[1])!=0) { // chdir는 현재 작업 디렉토리를 변경해줌
+                    perror("cd failed"); // 변경 실패 처리해줌 
+                }
+            }
+            continue;
+        }
+
+        // 사용자가 입력한 단어가 alias이면 별칭 등록 과정이 필요함 
+        if(strcmp(tokens[0], "alias") == 0) {
+            if(tokens[1] ==NULL) { // 인자가 없는 경우 처리 
+                for (int i = 0; i < aliasCount; i++) {
+                    printf("alias %s='%s'\n", alias_table[i].name, alias_table[i].command);
+                }
+            }
+            else { // 인자가 있는 경우 처리 
+                char *eq = strchr(tokens[1], '='); // 문자열에서 = 위치 찾음 
+                if(eq ==NULL) {
+                    fprintf(stderr, "alias: invalid format\n");
+                } else {
+                    *eq = '\0'; // 문자를 분리 
+                    char *name = tokens[1];
+                    char *command = eq + 1;
+                    if(command[0] == '\''&&command[strlen(command)-1] == '\'') {
+                        command[strlen(command)-1] = '\0'; // 문자열 끝 부분을 표시해주는 것 
+                        command++; // 원래는 '를 가르키고 있었으므로 건너뛸 것 
+                    }
+                    strcpy(alias_table[aliasCount].name, name);
+                    strcpy(alias_table[aliasCount].command, command);
+                    aliasCount++;
+                }
+            }
+            continue;
+        }
+
+        for(int i = 0; i<aliasCount; i++) {
+            if(strcmp(tokens[0], alias_table[i].name) == 0) {
+                strcpy(input, alias_table[i].command);
+                tokenCount = 0;
+                token = strtok(input, " ");
+                while(token != NULL && tokenCount <20) {
+                    tokens[tokenCount++] = token;
+                    token = strtok(NULL, " ");
+                }
+                tokens[tokenCount] = NULL;
+                break;
+            }
+        }
+
         // 부모 프로세스가 fork로 자식 프로세스를 만들었음 
         // 부모가 자식의 종료 상태를 확인하지 않으면
         // 자식 프로세스가 커널에 남기 때문에 회수해주어야 함!
@@ -56,8 +119,8 @@ int main() {
             waitpid(pid, &status, 0); // 여기서 0은 자식이 끝날 때까지 블럭된다는 뜻
         }
 
+
     }
-
-
+    
     return 0;
 }
